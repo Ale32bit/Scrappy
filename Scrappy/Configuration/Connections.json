@@ -1,0 +1,20 @@
+[
+  /*{
+    "Name": "Local Host",
+    "Address": "127.0.0.1",
+    "User": {
+      "Username": "user",
+      "Password": "password",
+      "Domain": ""
+    },
+    "Shares": [
+      {
+        "Name": "Share",
+        "Ignore": [
+          "*.dbg",
+          ".*"
+        ]
+      }
+    ]
+  }*/
+]
