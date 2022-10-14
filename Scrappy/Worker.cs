@@ -389,14 +389,21 @@ public class Worker : BackgroundService
 
     private static async Task<IPAddress> ResolveName(string hostname)
     {
-        if (IPAddress.TryParse(hostname, out var ipAddress))
-            return ipAddress;
+        try
+        {
+            if (IPAddress.TryParse(hostname, out var ipAddress))
+                return ipAddress;
 
-        var entries = await Dns.GetHostAddressesAsync(hostname);
+            var entries = await Dns.GetHostAddressesAsync(hostname);
 
-        if (entries.Length == 0)
+            if (entries.Length == 0)
+                return IPAddress.None;
+
+            return entries[0];
+        }
+        catch
+        {
             return IPAddress.None;
-
-        return entries[0];
+        }
     }
 }
