@@ -6,13 +6,13 @@ using System.Runtime.Loader;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Scrappy;
+namespace Scrappy.PluginLoader.PluginLoader;
 
-class PluginLoadContext : AssemblyLoadContext
+class LoadContext : AssemblyLoadContext
 {
     private AssemblyDependencyResolver _resolver;
 
-    public PluginLoadContext(string pluginPath)
+    public LoadContext(string pluginPath)
     {
         _resolver = new AssemblyDependencyResolver(pluginPath);
     }

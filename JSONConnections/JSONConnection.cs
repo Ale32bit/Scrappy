@@ -1,26 +1,23 @@
-﻿using Newtonsoft.Json;
+﻿using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using Scrappy.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Scrappy.Connections;
-public class JsonConnection : IConnection
+public class JsonPlugin : IPlugin
 {
     public const string ConfigurationPath = "Configuration/Connections.json";
 
-    private readonly ILogger<JsonConnection> _logger;
+    private readonly ILogger<JsonPlugin> _logger;
 
-    public JsonConnection(ILogger<JsonConnection> logger)
+    public JsonPlugin(ILogger<JsonPlugin> logger)
     {
         _logger = logger;
+
     }
 
     public async Task Init()
     {
-        _logger.LogInformation("Loaded JSON Connections plugin");
+        _logger.LogInformation("Loaded JSON plugin");
     }
 
     public async Task<IEnumerable<RemoteHost>> GetRemoteHostsAsync()
@@ -35,10 +32,5 @@ public class JsonConnection : IConnection
             return Enumerable.Empty<RemoteHost>();
 
         return remoteHosts;
-    }
-
-    public void Dispose()
-    {
-
     }
 }

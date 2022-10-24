@@ -12,7 +12,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace SQLite;
-class SQLiteConnection : IConnection
+class SQLiteConnection : IPlugin
 {
     public static void Main() { }
 

@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Scrappy.Connections;
+using Scrappy.PluginLoader.PluginLoader;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,8 +9,8 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Input;
 
-namespace Scrappy;
-public class PluginLoader
+namespace Scrappy.PluginLoader;
+public class Loader
 {
     public const string PluginFolder = "Plugins";
 
@@ -17,43 +18,43 @@ public class PluginLoader
     {
         var path = Path.Combine(Environment.CurrentDirectory, fileName);
 
-        var loadContext = new PluginLoadContext(path);
+        var loadContext = new LoadContext(path);
         return loadContext.LoadFromAssemblyName(new AssemblyName(Path.GetFileNameWithoutExtension(path)));
     }
 
-    public static async Task<IEnumerable<IConnection>> LoadPlugins(IServiceProvider serviceProvider)
+    public static async Task<IEnumerable<IPlugin>> LoadPlugins(IServiceProvider serviceProvider)
     {
         if (!Directory.Exists(PluginFolder))
             Directory.CreateDirectory(PluginFolder);
-        
-        var connections = new List<IConnection>();
-        foreach(var fileName in Directory.GetFiles(PluginFolder).Where(q => q.EndsWith(".dll")))
+
+        var plugins = new List<IPlugin>();
+        foreach (var fileName in Directory.GetFiles(PluginFolder).Where(q => q.EndsWith(".dll")))
         {
             var assembly = LoadPlugin(fileName);
 
             foreach (Type type in assembly.GetTypes())
             {
-                if (typeof(IConnection).IsAssignableFrom(type))
+                if (typeof(IPlugin).IsAssignableFrom(type))
                 {
-                    IConnection result = ActivatorUtilities.CreateInstance(serviceProvider, type) as IConnection;
-                    connections.Add(result);
+                    IPlugin result = ActivatorUtilities.CreateInstance(serviceProvider, type) as IPlugin;
+                    plugins.Add(result);
                 }
             }
 
         }
 
         // Pre init
-        foreach(var conn in connections)
+        foreach (var conn in plugins)
         {
             await conn.PreInit();
         }
 
         // Init
-        foreach(var conn in connections)
+        foreach (var conn in plugins)
         {
             await conn.Init();
         }
 
-        return connections;
+        return plugins;
     }
 }

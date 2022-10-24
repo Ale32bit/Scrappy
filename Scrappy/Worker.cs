@@ -1,5 +1,7 @@
 using Scrappy.Connections;
+using Scrappy.Events;
 using Scrappy.Models;
+using Scrappy.PluginLoader;
 using SMBLibrary;
 using SMBLibrary.Client;
 using System.Net;
@@ -15,7 +17,7 @@ public class Worker : BackgroundService
     private readonly IServiceProvider _serviceProvider;
     private readonly IHostApplicationLifetime _applicationLifetime;
 
-    public IEnumerable<IConnection> Connections { get; private set; }
+    public IEnumerable<IPlugin> Plugins { get; private set; }
     public long MaxFileSize;
 
     public static readonly string[] IgnoredPaths = {
@@ -35,9 +37,9 @@ public class Worker : BackgroundService
     {
         _logger.LogInformation("Fetching all hosts...");
         var hosts = new List<RemoteHost>();
-        foreach (var connection in Connections)
+        foreach (var plugin in Plugins)
         {
-            var connHosts = await connection.GetRemoteHostsAsync();
+            var connHosts = await plugin.GetRemoteHostsAsync();
             hosts.AddRange(connHosts);
         }
         return hosts;
@@ -50,6 +52,12 @@ public class Worker : BackgroundService
             foreach (var host in hosts)
             {
                 _logger.LogDebug("Starting scrape for {host}", host.Name);
+
+                var scrapeStartEvent = new ScrapeHostEvent {
+                    RemoteHost = host,
+                };
+                foreach (var plugin in Plugins)
+                    plugin.OnScrapeHostStart(scrapeStartEvent);
 
                 var address = await ResolveName(host.Address);
                 var isOnline = await IsHostOnlineAsync(address);
@@ -217,6 +225,15 @@ public class Worker : BackgroundService
 
             var tempPath = Path.Combine(Path.GetDirectoryName(fullOutputPath), Path.GetRandomFileName());
 
+            var fileDownloadEvent = new FileDownloadEvent
+            {
+                RemoteHost = host,
+                RemoteShare = share,
+                SourceFilePath = path,
+            };
+            foreach (var plugin in Plugins)
+                plugin.OnFileDownload(fileDownloadEvent);
+
             Stream stream;
             if (share.AppendMode && File.Exists(fullOutputPath))
                 stream = new MemoryStream();
@@ -258,9 +275,19 @@ public class Worker : BackgroundService
                 File.Move(tempPath, fullOutputPath, true);
             }
 
+            var fileWriteEvent = new FileWriteEvent
+            {
+                RemoteHost = host,
+                RemoteShare = share,
+                SourceFilePath = path,
+                DestinationFilePath = fullOutputPath,
+                AppendMode = share.AppendMode,
+            };
+            foreach (var plugin in Plugins)
+                plugin.OnFileWrite(fileWriteEvent);
+
             DownloadedFilesCounter.WithLabels(host.Address, host.Name).Inc();
         }
-
     }
 
     private void AppendOutputFile(string path, Stream stream, RemoteHost host, RemoteShare share)
@@ -337,7 +364,7 @@ public class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        Connections = await PluginLoader.LoadPlugins(_serviceProvider);
+        Plugins = await Loader.LoadPlugins(_serviceProvider);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -350,8 +377,14 @@ public class Worker : BackgroundService
 
                 _logger.LogInformation("Starting all scrapers");
 
+                foreach (var plugin in Plugins)
+                    plugin.OnScrapeCycleStart();
+
                 using var countdownEvent = StartScraping(groupedHosts);
                 await Task.Run(() => countdownEvent.Wait(TimeSpan.FromMinutes(_configuration.GetValue<int>("CycleTimeout", 30))), stoppingToken);
+
+                foreach (var plugin in Plugins)
+                    plugin.OnScrapeCycleEnd();
 
                 _logger.LogInformation("All threads ended");
 
