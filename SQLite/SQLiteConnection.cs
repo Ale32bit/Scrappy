@@ -26,9 +26,10 @@ class SQLiteConnection : IPlugin
         _configuration = configuration;
     }
 
-    public async Task Init()
+    public Task Init()
     {
         _logger.LogInformation("SQLite connection ready");
+        return Task.CompletedTask;
     }
 
     public async Task<IEnumerable<RemoteHost>> GetRemoteHostsAsync()

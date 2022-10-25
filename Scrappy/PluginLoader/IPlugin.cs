@@ -24,5 +24,5 @@ public interface IPlugin
     public void OnFileWrite(FileWriteEvent ev) { }
     public void OnScrapeHostStart(ScrapeHostEvent ev) { }
     public void OnScrapeHostEnd(ScrapeHostEvent ev) { }
-    public void OnScrapeHostFail(ScrapeHostEvent ev) { }
+    public void OnScrapeHostFail(ScrapeHostFailEvent ev) { }
 }

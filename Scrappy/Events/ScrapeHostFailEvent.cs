@@ -2,7 +2,8 @@
 
 namespace Scrappy.Events;
 #nullable disable
-public class ScrapeHostEvent
+public class ScrapeHostFailEvent
 {
     public RemoteHost RemoteHost { get; set; }
+    public string Message { get; set; }
 }

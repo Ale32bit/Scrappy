@@ -4,9 +4,6 @@ using Scrappy.Models;
 using Scrappy.PluginLoader;
 using SMBLibrary;
 using SMBLibrary.Client;
-using System.Net;
-using System.Net.NetworkInformation;
-using System.Text.RegularExpressions;
 using static Scrappy.Metrics;
 
 namespace Scrappy;
@@ -15,7 +12,6 @@ public class Worker : BackgroundService
     private readonly ILogger<Worker> _logger;
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
-    private readonly IHostApplicationLifetime _applicationLifetime;
 
     public IEnumerable<IPlugin> Plugins { get; private set; }
     public long MaxFileSize;
@@ -25,12 +21,11 @@ public class Worker : BackgroundService
         "..",
     };
 
-    public Worker(ILogger<Worker> logger, IConfiguration configuration, IServiceProvider serviceProvider, IHostApplicationLifetime applicationLifetime)
+    public Worker(ILogger<Worker> logger, IConfiguration configuration, IServiceProvider serviceProvider)
     {
         _logger = logger;
         _configuration = configuration;
         _serviceProvider = serviceProvider;
-        _applicationLifetime = applicationLifetime;
     }
 
     private async Task<IList<RemoteHost>> FetchAllHostsAsync()
@@ -45,7 +40,7 @@ public class Worker : BackgroundService
         return hosts;
     }
 
-    private async Task ScrapeGroup(IEnumerable<RemoteHost> hosts, CountdownEvent countdown)
+    private async Task ScrapeGroup(IEnumerable<RemoteHost> hosts)
     {
         try
         {
@@ -53,14 +48,15 @@ public class Worker : BackgroundService
             {
                 _logger.LogDebug("Starting scrape for {host}", host.Name);
 
-                var scrapeStartEvent = new ScrapeHostEvent {
+                var scrapeStartEvent = new ScrapeHostEvent
+                {
                     RemoteHost = host,
                 };
                 foreach (var plugin in Plugins)
                     plugin.OnScrapeHostStart(scrapeStartEvent);
 
-                var address = await ResolveName(host.Address);
-                var isOnline = await IsHostOnlineAsync(address);
+                var address = await Utils.ResolveName(host.Address);
+                var isOnline = await Utils.IsHostOnlineAsync(address);
 
                 if (!isOnline)
                 {
@@ -77,8 +73,16 @@ public class Worker : BackgroundService
                     connected = smbClient.Connect(address, SMBTransportType.NetBiosOverTCP);
                     if (!connected)
                     {
-                        _logger.LogInformation($"Could not connect to host {host.Address} ({host.Name})");
+                        _logger.LogInformation("Could not connect to host {host.Address} ({host.Name})", host.Address, host.Name);
                         SetHostStatus(HostStatus.Errored, host);
+                        var hostFailEvent = new ScrapeHostFailEvent
+                        {
+                            RemoteHost = host,
+                            Message = "Connection failure",
+                        };
+                        foreach (var plugin in Plugins)
+                            plugin.OnScrapeHostFail(hostFailEvent);
+
                         continue;
                     }
                 }
@@ -88,9 +92,16 @@ public class Worker : BackgroundService
                 var loginStatus = smbClient.Login(host.User.Domain, host.User.Username, host.User.Password);
                 if (loginStatus != NTStatus.STATUS_SUCCESS)
                 {
-                    _logger.LogWarning($"Could not authenticate to host {host.Address} ({host.Name}): {loginStatus}. Skipping...");
+                    _logger.LogWarning("Could not authenticate to host {host.Address} ({host.Name}): {loginStatus}. Skipping...", host.Address, host.Name, loginStatus);
                     SetHostStatus(HostStatus.Errored, host);
                     smbClient.Disconnect();
+                    var hostFailEvent = new ScrapeHostFailEvent
+                    {
+                        RemoteHost = host,
+                        Message = "Authentication failure",
+                    };
+                    foreach (var plugin in Plugins)
+                        plugin.OnScrapeHostFail(hostFailEvent);
                     continue;
                 }
 
@@ -100,6 +111,14 @@ public class Worker : BackgroundService
                     _logger.LogError("Error getting list of shares for {host}. {status}", host.Name, listStatus);
                     SetHostStatus(HostStatus.Errored, host);
                     smbClient.Disconnect();
+                    var hostFailEvent = new ScrapeHostFailEvent
+                    {
+                        RemoteHost = host,
+                        Message = "Share list failure",
+                    };
+                    foreach (var plugin in Plugins)
+                        plugin.OnScrapeHostFail(hostFailEvent);
+
                     continue;
                 }
 
@@ -107,7 +126,7 @@ public class Worker : BackgroundService
                 {
                     if (!hostShares.Contains(share.Name))
                     {
-                        _logger.LogWarning($"Host {host.Name} does not contain the share {share.Name}");
+                        _logger.LogWarning("Host {host.Name} does not contain the share {share.Name}", host.Name, share.Name);
                         SetHostStatus(HostStatus.Errored, host);
                         continue;
                     }
@@ -115,7 +134,7 @@ public class Worker : BackgroundService
                     var shareStore = smbClient.TreeConnect(share.Name, out var status);
                     if (status != NTStatus.STATUS_SUCCESS)
                     {
-                        _logger.LogError(status.ToString());
+                        _logger.LogError("{status}", status.ToString());
                         SetHostStatus(HostStatus.Errored, host);
                         continue;
                     }
@@ -127,6 +146,13 @@ public class Worker : BackgroundService
                 }
 
                 smbClient.Disconnect();
+
+                var scrapeHostEndEvent = new ScrapeHostEvent
+                {
+                    RemoteHost = host,
+                };
+                foreach (var plugin in Plugins)
+                    plugin.OnScrapeHostEnd(scrapeHostEndEvent);
             }
         }
         catch (Exception e)
@@ -156,20 +182,19 @@ public class Worker : BackgroundService
         {
             if (status == NTStatus.STATUS_SHARING_VIOLATION)
             {
-                _logger.LogInformation($"Error reading path {path}:{status} {fileStatus}. Is the file in use?");
+                _logger.LogInformation("Error reading path {path}:{status} {fileStatus}. Is the file in use?", path, status, fileStatus);
             }
             else
             {
-                _logger.LogError($"Error reading path {path}:{status} {fileStatus}");
+                _logger.LogError("Error reading path {path}:{status} {fileStatus}", path, status, fileStatus);
             }
             return;
         }
 
         if (isDirectory)
         {
-            _logger.LogDebug($"Directory {path}");
-            // DELETE ME
-            _logger.LogInformation("{host}/{fileName}: fileHandle is {fileHandle}; shareStore is {shareStore}; CreateFile status is {status}", host.Name, path, fileHandle, shareStore, status);
+            _logger.LogDebug("Directory {path}", path);
+            _logger.LogTrace("{host}/{fileName}: fileHandle is {fileHandle}; shareStore is {shareStore}; CreateFile status is {status}", host.Name, path, fileHandle, shareStore, status);
 
             try
             {
@@ -183,10 +208,10 @@ public class Worker : BackgroundService
                         continue;
 
                     var filename = Path.GetFileName(path);
-                    if (IsFiltered(filename, share.Ignore))
+                    if (Utils.IsFiltered(filename, share.Ignore))
                         continue;
 
-                    Metrics.ComparedFilesCounter.WithLabels(host.Address, host.Name).Inc();
+                    ComparedFilesCounter.WithLabels(host.Address, host.Name).Inc();
 
                     var fullOutputPath = Path.Combine(_configuration["OutputDirectoryPath"], host.Name, share.Name, path, file.FileName);
                     if (file.FileAttributes != SMBLibrary.FileAttributes.Directory && File.Exists(fullOutputPath))
@@ -207,23 +232,24 @@ public class Worker : BackgroundService
         }
         else
         {
-            _logger.LogDebug($"File      {path}");
+            _logger.LogDebug("File      {path}", path);
 
             shareStore.GetFileInformation(out var fileInfoBase, fileHandle, FileInformationClass.FileAllInformation);
             FileAllInformation fileInfo = (FileAllInformation)fileInfoBase;
 
             if (fileInfo.StandardInformation.AllocationSize > MaxFileSize)
             {
-                _logger.LogWarning($"File at {path} exceeds max file size!");
+                _logger.LogWarning("File at {path} exceeds max file size!", path);
                 return;
             }
 
             _logger.LogDebug("Starting download for file {host} / {fileName};", host.Name, path);
 
             var fullOutputPath = Path.Combine(_configuration["OutputDirectoryPath"], host.Name, share.Name, path);
-            Directory.CreateDirectory(Path.GetDirectoryName(fullOutputPath));
+            var outputPathDir = Path.GetDirectoryName(fullOutputPath)!;
+            Directory.CreateDirectory(outputPathDir);
 
-            var tempPath = Path.Combine(Path.GetDirectoryName(fullOutputPath), Path.GetRandomFileName());
+            var tempPath = Path.Combine(outputPathDir, Path.GetRandomFileName());
 
             var fileDownloadEvent = new FileDownloadEvent
             {
@@ -249,7 +275,15 @@ public class Worker : BackgroundService
                 if (status != NTStatus.STATUS_SUCCESS && status != NTStatus.STATUS_END_OF_FILE)
                 {
                     failed = true;
-                    _logger.LogError($"Failed to read file {path}");
+                    var hostFailEvent = new ScrapeHostFailEvent
+                    {
+                        RemoteHost = host,
+                        Message = status.ToString(),
+                    };
+                    foreach (var plugin in Plugins)
+                        plugin.OnScrapeHostFail(hostFailEvent);
+
+                    _logger.LogError("Failed to read file {path}", path);
                 }
 
                 if (status == NTStatus.STATUS_END_OF_FILE || data == null || data.Length == 0)
@@ -354,7 +388,7 @@ public class Worker : BackgroundService
         {
             ThreadPool.QueueUserWorkItem(async _ =>
             {
-                await ScrapeGroup(group, countdown);
+                await ScrapeGroup(group);
                 countdown.Signal();
             });
         }
@@ -381,7 +415,7 @@ public class Worker : BackgroundService
                     plugin.OnScrapeCycleStart();
 
                 using var countdownEvent = StartScraping(groupedHosts);
-                await Task.Run(() => countdownEvent.Wait(TimeSpan.FromMinutes(_configuration.GetValue<int>("CycleTimeout", 30))), stoppingToken);
+                await Task.Run(() => countdownEvent.Wait(TimeSpan.FromMinutes(_configuration.GetValue("CycleTimeout", 30))), stoppingToken);
 
                 foreach (var plugin in Plugins)
                     plugin.OnScrapeCycleEnd();
@@ -394,49 +428,6 @@ public class Worker : BackgroundService
             {
                 _logger.LogError(message: "Execution failure", exception: e); ;
             }
-        }
-    }
-
-    public static bool Matches(string str, string filter)
-    {
-        var reg = "^" + Regex.Escape(str).Replace("\\*", ".*") + "$";
-        return Regex.IsMatch(filter, reg);
-    }
-
-    public static bool IsFiltered(string str, IEnumerable<string> filters)
-    {
-        foreach (var filter in filters)
-        {
-            if (Matches(str, filter))
-                return true;
-        }
-        return false;
-    }
-
-    public static async Task<bool> IsHostOnlineAsync(IPAddress host, int timeout = 1000)
-    {
-        using var ping = new Ping();
-        var result = await ping.SendPingAsync(host, timeout);
-        return result.Status == IPStatus.Success;
-    }
-
-    private static async Task<IPAddress> ResolveName(string hostname)
-    {
-        try
-        {
-            if (IPAddress.TryParse(hostname, out var ipAddress))
-                return ipAddress;
-
-            var entries = await Dns.GetHostAddressesAsync(hostname);
-
-            if (entries.Length == 0)
-                return IPAddress.None;
-
-            return entries[0];
-        }
-        catch
-        {
-            return IPAddress.None;
         }
     }
 }

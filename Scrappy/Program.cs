@@ -11,7 +11,7 @@ IHost host = Host.CreateDefaultBuilder(args)
         Directory.CreateDirectory(logsPath);
         var now = DateTime.Now;
         var logName = $"{now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}.log";
-        var fileLoggerProvider = new FileLoggerProvider(Path.Combine(logsPath,logName));
+        var fileLoggerProvider = new FileLoggerProvider(Path.Combine(logsPath, logName));
         services.AddLogging(o =>
         {
             o.AddProvider(fileLoggerProvider);
@@ -20,7 +20,7 @@ IHost host = Host.CreateDefaultBuilder(args)
         services.AddHostedService<Worker>();
 
         var promConfig = context.Configuration.GetSection("Prometheus");
-        if(promConfig.GetValue("Enabled", false))
+        if (promConfig.GetValue("Enabled", false))
         {
             var promServer = new KestrelMetricServer(promConfig.GetValue<int>("Port"));
             promServer.Start();

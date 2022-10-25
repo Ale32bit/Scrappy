@@ -1,13 +1,6 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Scrappy.Connections;
+﻿using Scrappy.Connections;
 using Scrappy.PluginLoader.PluginLoader;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Input;
 
 namespace Scrappy.PluginLoader;
 public class Loader

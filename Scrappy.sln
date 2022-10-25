@@ -7,7 +7,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Scrappy", "Scrappy\Scrappy.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SQLite", "SQLite\SQLite.csproj", "{38F816D2-4977-40D4-8F4F-480C9D87B34F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JSON", "JSONConnections\JSON.csproj", "{735FDFF8-D8E8-408F-9A37-57EE6EA57799}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JSON", "JSON\JSON.csproj", "{735FDFF8-D8E8-408F-9A37-57EE6EA57799}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
