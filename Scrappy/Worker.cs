@@ -1,7 +1,6 @@
-using Scrappy.Connections;
+using Scrappy.PluginLoader;
 using Scrappy.Events;
 using Scrappy.Models;
-using Scrappy.PluginLoader;
 using SMBLibrary;
 using SMBLibrary.Client;
 using static Scrappy.Metrics;

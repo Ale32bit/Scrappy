@@ -2,7 +2,7 @@
 using Newtonsoft.Json;
 using Scrappy.Models;
 
-namespace Scrappy.Connections;
+namespace Scrappy.PluginLoader;
 public class JsonPlugin : IPlugin
 {
     public const string ConfigurationPath = "Configuration/Connections.json";

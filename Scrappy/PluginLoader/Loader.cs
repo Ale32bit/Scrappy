@@ -1,5 +1,4 @@
-﻿using Scrappy.Connections;
-using Scrappy.PluginLoader.PluginLoader;
+﻿using Scrappy.PluginLoader.PluginLoader;
 using System.Reflection;
 
 namespace Scrappy.PluginLoader;

@@ -1,15 +1,8 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Scrappy.Connections;
+using Scrappy.PluginLoader;
 using Scrappy.Models;
-using SMBLibrary.Services;
 using SQLite.Data;
-using SQLite.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SQLite;
 class SQLiteConnection : IPlugin

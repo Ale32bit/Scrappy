@@ -1,7 +1,7 @@
 ﻿using Scrappy.Events;
 using Scrappy.Models;
 
-namespace Scrappy.Connections;
+namespace Scrappy.PluginLoader;
 public interface IPlugin
 {
     public Task PreInit()
