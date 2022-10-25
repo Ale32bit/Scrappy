@@ -1,18 +1,11 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Scrappy.Connections;
+using Scrappy.PluginLoader;
 using Scrappy.Models;
-using SMBLibrary.Services;
 using SQLite.Data;
-using SQLite.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SQLite;
-class SQLiteConnection : IConnection
+class SQLiteConnection : IPlugin
 {
     public static void Main() { }
 
@@ -26,9 +19,10 @@ class SQLiteConnection : IConnection
         _configuration = configuration;
     }
 
-    public async Task Init()
+    public Task Init()
     {
         _logger.LogInformation("SQLite connection ready");
+        return Task.CompletedTask;
     }
 
     public async Task<IEnumerable<RemoteHost>> GetRemoteHostsAsync()

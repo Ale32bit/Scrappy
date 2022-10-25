@@ -5,7 +5,11 @@ VisualStudioVersion = 17.1.32210.238
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Scrappy", "Scrappy\Scrappy.csproj", "{C4E2EB6C-DAB5-4D35-AA39-6F9C5526A202}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SQLite", "SQLite\SQLite.csproj", "{38F816D2-4977-40D4-8F4F-480C9D87B34F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SQLite", "SQLite\SQLite.csproj", "{38F816D2-4977-40D4-8F4F-480C9D87B34F}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JSON", "JSON\JSON.csproj", "{735FDFF8-D8E8-408F-9A37-57EE6EA57799}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExamplePlugin", "ExamplePlugin\ExamplePlugin.csproj", "{5F64064B-3507-4636-93FA-95142BF77EBA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +25,14 @@ Global
 		{38F816D2-4977-40D4-8F4F-480C9D87B34F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{38F816D2-4977-40D4-8F4F-480C9D87B34F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{38F816D2-4977-40D4-8F4F-480C9D87B34F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{735FDFF8-D8E8-408F-9A37-57EE6EA57799}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{735FDFF8-D8E8-408F-9A37-57EE6EA57799}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{735FDFF8-D8E8-408F-9A37-57EE6EA57799}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{735FDFF8-D8E8-408F-9A37-57EE6EA57799}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5F64064B-3507-4636-93FA-95142BF77EBA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5F64064B-3507-4636-93FA-95142BF77EBA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5F64064B-3507-4636-93FA-95142BF77EBA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5F64064B-3507-4636-93FA-95142BF77EBA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

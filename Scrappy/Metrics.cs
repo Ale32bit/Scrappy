@@ -1,12 +1,5 @@
 ﻿using Prometheus;
 using Scrappy.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.NetworkInformation;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Scrappy;
 public class Metrics
@@ -48,10 +41,5 @@ public class Metrics
     public static void SetHostStatus(HostStatus status, RemoteHost host)
     {
         HostsGauge.WithLabels(host.Address, host.Name).Set((int)status);
-    }
-
-    public static void ClearHosts()
-    {
-
     }
 }

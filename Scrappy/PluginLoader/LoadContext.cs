@@ -1,18 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
+﻿using System.Reflection;
 using System.Runtime.Loader;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace Scrappy;
+namespace Scrappy.PluginLoader.PluginLoader;
 
-class PluginLoadContext : AssemblyLoadContext
+class LoadContext : AssemblyLoadContext
 {
     private AssemblyDependencyResolver _resolver;
 
-    public PluginLoadContext(string pluginPath)
+    public LoadContext(string pluginPath)
     {
         _resolver = new AssemblyDependencyResolver(pluginPath);
     }
