@@ -332,12 +332,10 @@ public class Worker : BackgroundService
         var bufferSize = _configuration.GetValue("AppendBufferSize", 1024 * 1024);
         using var localStream = File.OpenText(fullOutputPath);
         long position = 0;
-        bool lessThanSplitSize = false;
+        bool lessThanSplitSize = localStream.BaseStream.Length < bufferSize;
 
-        if (localStream.BaseStream.Length >= bufferSize)
+        if (!lessThanSplitSize)
             position = localStream.BaseStream.Length - bufferSize;
-        else
-            lessThanSplitSize = true;
 
         var buffer = new byte[bufferSize];
         localStream.BaseStream.Position = position;
@@ -403,7 +401,6 @@ public class Worker : BackgroundService
         {
             try
             {
-
                 MaxFileSize = _configuration.GetValue<long>("MaxFileSize", 1073741824);
                 var allHosts = await FetchAllHostsAsync();
                 var groupedHosts = GroupHostsForThreads(allHosts);
@@ -414,7 +411,11 @@ public class Worker : BackgroundService
                     plugin.OnScrapeCycleStart();
 
                 using var countdownEvent = StartScraping(groupedHosts);
-                await Task.Run(() => countdownEvent.Wait(TimeSpan.FromMinutes(_configuration.GetValue("CycleTimeout", 30))), stoppingToken);
+                var isSet = await Task.Run(() => countdownEvent.Wait(TimeSpan.FromMinutes(_configuration.GetValue("CycleTimeout", 30))), stoppingToken);
+
+                if (!isSet)
+                    foreach (var plugin in Plugins)
+                        plugin.OnScrapeCycleTimeout();
 
                 foreach (var plugin in Plugins)
                     plugin.OnScrapeCycleEnd();
