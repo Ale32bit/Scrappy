@@ -4,6 +4,7 @@ using Scrappy.Models;
 using SMBLibrary;
 using SMBLibrary.Client;
 using static Scrappy.Metrics;
+using System.Collections.Concurrent;
 
 namespace Scrappy;
 public class Worker : BackgroundService
@@ -13,6 +14,8 @@ public class Worker : BackgroundService
     private readonly IServiceProvider _serviceProvider;
 
     public IEnumerable<IPlugin> Plugins { get; private set; }
+    private readonly ConcurrentQueue<RemoteHost> HostsQueue = new();
+
     public long MaxFileSize;
 
     public static readonly string[] IgnoredPaths = {
@@ -39,124 +42,142 @@ public class Worker : BackgroundService
         return hosts;
     }
 
-    private async Task ScrapeGroup(IEnumerable<RemoteHost> hosts)
+    private async Task ScrapeHost(RemoteHost host)
     {
         try
         {
-            foreach (var host in hosts)
+            _logger.LogDebug("Starting scrape for {host}", host.Name);
+
+            var scrapeStartEvent = new ScrapeHostEvent
             {
-                _logger.LogDebug("Starting scrape for {host}", host.Name);
+                RemoteHost = host,
+            };
+            foreach (var plugin in Plugins)
+                plugin.OnScrapeHostStart(scrapeStartEvent);
 
-                var scrapeStartEvent = new ScrapeHostEvent
-                {
-                    RemoteHost = host,
-                };
-                foreach (var plugin in Plugins)
-                    plugin.OnScrapeHostStart(scrapeStartEvent);
+            var address = await Utils.ResolveName(host.Address);
+            var isOnline = await Utils.IsHostOnlineAsync(address);
 
-                var address = await Utils.ResolveName(host.Address);
-                var isOnline = await Utils.IsHostOnlineAsync(address);
+            if (!isOnline)
+            {
+                SetHostStatus(HostStatus.Offline, host);
+                _logger.LogDebug("{host} is offline", host.Name);
+                return;
+            }
 
-                if (!isOnline)
-                {
-                    SetHostStatus(HostStatus.Offline, host);
-                    _logger.LogDebug("{host} is offline", host.Name);
-                    continue;
-                }
+            ISMBClient smbClient = host.Legacy ? new SMB1Client() : new SMB2Client();
 
-                ISMBClient smbClient = host.Legacy ? new SMB1Client() : new SMB2Client();
-
-                var connected = smbClient.Connect(address, SMBTransportType.DirectTCPTransport);
+            var connected = smbClient.Connect(address, SMBTransportType.DirectTCPTransport);
+            if (!connected)
+            {
+                connected = smbClient.Connect(address, SMBTransportType.NetBiosOverTCP);
                 if (!connected)
                 {
-                    connected = smbClient.Connect(address, SMBTransportType.NetBiosOverTCP);
-                    if (!connected)
-                    {
-                        _logger.LogInformation("Could not connect to host {host.Address} ({host.Name})", host.Address, host.Name);
-                        SetHostStatus(HostStatus.Errored, host);
-                        var hostFailEvent = new ScrapeHostFailEvent
-                        {
-                            RemoteHost = host,
-                            Message = "Connection failure",
-                        };
-                        foreach (var plugin in Plugins)
-                            plugin.OnScrapeHostFail(hostFailEvent);
-
-                        continue;
-                    }
-                }
-
-                SetHostStatus(HostStatus.Online, host);
-
-                var loginStatus = smbClient.Login(host.User.Domain, host.User.Username, host.User.Password);
-                if (loginStatus != NTStatus.STATUS_SUCCESS)
-                {
-                    _logger.LogWarning("Could not authenticate to host {host.Address} ({host.Name}): {loginStatus}. Skipping...", host.Address, host.Name, loginStatus);
+                    _logger.LogInformation("Could not connect to host {host.Address} ({host.Name})", host.Address, host.Name);
                     SetHostStatus(HostStatus.Errored, host);
-                    smbClient.Disconnect();
+
                     var hostFailEvent = new ScrapeHostFailEvent
                     {
                         RemoteHost = host,
-                        Message = "Authentication failure",
-                    };
-                    foreach (var plugin in Plugins)
-                        plugin.OnScrapeHostFail(hostFailEvent);
-                    continue;
-                }
-
-                var hostShares = smbClient.ListShares(out var listStatus);
-                if (listStatus != NTStatus.STATUS_SUCCESS)
-                {
-                    _logger.LogError("Error getting list of shares for {host}. {status}", host.Name, listStatus);
-                    SetHostStatus(HostStatus.Errored, host);
-                    smbClient.Disconnect();
-                    var hostFailEvent = new ScrapeHostFailEvent
-                    {
-                        RemoteHost = host,
-                        Message = "Share list failure",
+                        Message = "Connection failure",
                     };
                     foreach (var plugin in Plugins)
                         plugin.OnScrapeHostFail(hostFailEvent);
 
-                    continue;
+                    return;
                 }
+            }
 
-                foreach (var share in host.Shares)
-                {
-                    if (!hostShares.Contains(share.Name))
-                    {
-                        _logger.LogWarning("Host {host.Name} does not contain the share {share.Name}", host.Name, share.Name);
-                        SetHostStatus(HostStatus.Errored, host);
-                        continue;
-                    }
+            SetHostStatus(HostStatus.Online, host);
 
-                    var shareStore = smbClient.TreeConnect(share.Name, out var status);
-                    if (status != NTStatus.STATUS_SUCCESS)
-                    {
-                        _logger.LogError("{status}", status.ToString());
-                        SetHostStatus(HostStatus.Errored, host);
-                        continue;
-                    }
-
-                    var basePath = host.Legacy ? @"\\" : "";
-
-                    RecursiveCopy(basePath, true, shareStore, host, share);
-
-                }
-
+            var loginStatus = smbClient.Login(host.User.Domain, host.User.Username, host.User.Password);
+            if (loginStatus != NTStatus.STATUS_SUCCESS)
+            {
+                _logger.LogWarning("Could not authenticate to host {host.Address} ({host.Name}): {loginStatus}. Skipping...", host.Address, host.Name, loginStatus);
+                SetHostStatus(HostStatus.Errored, host);
                 smbClient.Disconnect();
-
-                var scrapeHostEndEvent = new ScrapeHostEvent
+                var hostFailEvent = new ScrapeHostFailEvent
                 {
                     RemoteHost = host,
+                    Message = "Authentication failure",
                 };
                 foreach (var plugin in Plugins)
-                    plugin.OnScrapeHostEnd(scrapeHostEndEvent);
+                    plugin.OnScrapeHostFail(hostFailEvent);
+
+                return;
             }
+
+            var hostShares = smbClient.ListShares(out var listStatus);
+            if (listStatus != NTStatus.STATUS_SUCCESS)
+            {
+                _logger.LogError("Error getting list of shares for {host}. {status}", host.Name, listStatus);
+                SetHostStatus(HostStatus.Errored, host);
+                smbClient.Disconnect();
+                var hostFailEvent = new ScrapeHostFailEvent
+                {
+                    RemoteHost = host,
+                    Message = "Share list failure",
+                };
+                foreach (var plugin in Plugins)
+                    plugin.OnScrapeHostFail(hostFailEvent);
+
+                return;
+            }
+
+            foreach (var share in host.Shares)
+            {
+                if (!hostShares.Contains(share.Name))
+                {
+                    _logger.LogWarning("Host {host.Name} does not contain the share {share.Name}", host.Name, share.Name);
+                    SetHostStatus(HostStatus.Errored, host);
+                    continue;
+                }
+
+                var shareStore = smbClient.TreeConnect(share.Name, out var status);
+                if (status != NTStatus.STATUS_SUCCESS)
+                {
+                    _logger.LogError("{status}", status.ToString());
+                    SetHostStatus(HostStatus.Errored, host);
+                    continue;
+                }
+
+                var basePath = host.Legacy ? @"\\" : "";
+
+                RecursiveCopy(basePath, true, shareStore, host, share);
+
+            }
+
+            smbClient.Disconnect();
+
+
         }
         catch (Exception e)
         {
-            _logger.LogError(message: "Scrape error", exception: e);
+            _logger.LogError(exception: e, message: "Exception in ScrapeHost");
+            var hostFailEvent = new ScrapeHostFailEvent
+            {
+                RemoteHost = host,
+                Message = e.Message,
+            };
+            foreach (var plugin in Plugins)
+                plugin.OnScrapeHostFail(hostFailEvent);
+        }
+        finally
+        {
+            var scrapeHostEndEvent = new ScrapeHostEvent
+            {
+                RemoteHost = host,
+            };
+            foreach (var plugin in Plugins)
+                plugin.OnScrapeHostEnd(scrapeHostEndEvent);
+        }
+    }
+
+    private async Task Dispatch()
+    {
+        while (HostsQueue.TryDequeue(out var host))
+        {
+            await ScrapeHost(host);
         }
     }
 
@@ -358,34 +379,14 @@ public class Worker : BackgroundService
         }
     }
 
-    private IList<RemoteHost>[] GroupHostsForThreads(IList<RemoteHost> hosts)
+    private CountdownEvent StartScraping(int threads)
     {
-        var threadsCount = _configuration.GetValue("Threads", 2);
-        var hostGroups = new IList<RemoteHost>[threadsCount];
-
-        for (int i = 0; i < threadsCount; i++)
-        {
-            hostGroups[i] = new List<RemoteHost>();
-        }
-
-        for (int i = 0; i < hosts.Count; i++)
-        {
-            var host = hosts[i];
-            var groupIndex = i % threadsCount;
-            hostGroups[groupIndex].Add(host);
-        }
-
-        return hostGroups;
-    }
-
-    private CountdownEvent StartScraping(IList<RemoteHost>[] groupedHosts)
-    {
-        CountdownEvent countdown = new(groupedHosts.Length);
-        foreach (var group in groupedHosts)
+        CountdownEvent countdown = new(threads);
+        for (int i = 0; i < threads; i++)
         {
             ThreadPool.QueueUserWorkItem(async _ =>
             {
-                await ScrapeGroup(group);
+                await Dispatch();
                 countdown.Signal();
             });
         }
@@ -402,15 +403,18 @@ public class Worker : BackgroundService
             try
             {
                 MaxFileSize = _configuration.GetValue<long>("MaxFileSize", 1073741824);
+                HostsQueue.Clear();
                 var allHosts = await FetchAllHostsAsync();
-                var groupedHosts = GroupHostsForThreads(allHosts);
+                foreach (var host in allHosts)
+                    HostsQueue.Enqueue(host);
 
                 _logger.LogInformation("Starting all scrapers");
 
                 foreach (var plugin in Plugins)
                     plugin.OnScrapeCycleStart();
 
-                using var countdownEvent = StartScraping(groupedHosts);
+                using var countdownEvent = StartScraping(_configuration.GetValue("Threads", 2));
+
                 var isSet = await Task.Run(() => countdownEvent.Wait(TimeSpan.FromMinutes(_configuration.GetValue("CycleTimeout", 30))), stoppingToken);
 
                 if (!isSet)
