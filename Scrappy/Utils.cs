@@ -36,7 +36,7 @@ public class Utils
             if (IPAddress.TryParse(hostname, out var ipAddress))
                 return ipAddress;
 
-            var entries = await Dns.GetHostAddressesAsync(hostname);
+            var entries = await Dns.GetHostAddressesAsync(hostname, System.Net.Sockets.AddressFamily.InterNetwork);
 
             if (entries.Length == 0)
                 return IPAddress.None;
