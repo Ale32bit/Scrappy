@@ -5,6 +5,7 @@ using SMBLibrary;
 using SMBLibrary.Client;
 using static Scrappy.Metrics;
 using System.Collections.Concurrent;
+using System.IO;
 
 namespace Scrappy;
 public class Worker : BackgroundService
@@ -15,6 +16,8 @@ public class Worker : BackgroundService
 
     public IEnumerable<IPlugin> Plugins { get; private set; }
     private readonly ConcurrentQueue<RemoteHost> HostsQueue = new();
+    // name+address:share/filePath = dateTime
+    private readonly ConcurrentDictionary<string, DateTime> LocalFilesCache = new();
 
     public long MaxFileSize;
 
@@ -28,6 +31,27 @@ public class Worker : BackgroundService
         _logger = logger;
         _configuration = configuration;
         _serviceProvider = serviceProvider;
+    }
+
+    private DateTime GetLastFileWrite(RemoteHost host, RemoteShare share, params string[] pathParts)
+    {
+        var filePath = Path.Combine(pathParts);
+        var key = $"{host.Name}+{host.Address}:{share.Name}/{filePath}";
+        if (!LocalFilesCache.TryGetValue(key, out DateTime dateTime))
+        {
+            var fullOutputPath = Path.Combine(_configuration["OutputDirectoryPath"], host.Name, share.Name, filePath);
+            dateTime = File.GetLastWriteTimeUtc(fullOutputPath);
+            LocalFilesCache[key] = dateTime;
+        }
+
+        return dateTime;
+    }
+
+    private void UpdateLastFileWrite(RemoteHost host, RemoteShare share, params string[] pathParts)
+    {
+        var filePath = Path.Combine(pathParts);
+        var key = $"{host.Name}+{host.Address}:{share.Name}/{filePath}";
+        LocalFilesCache[key] = DateTime.UtcNow;
     }
 
     private async Task<IList<RemoteHost>> FetchAllHostsAsync()
@@ -236,7 +260,7 @@ public class Worker : BackgroundService
                     var fullOutputPath = Path.Combine(_configuration["OutputDirectoryPath"], host.Name, share.Name, path, file.FileName);
                     if (file.FileAttributes != SMBLibrary.FileAttributes.Directory && File.Exists(fullOutputPath))
                     {
-                        var lastLocalWriteDate = File.GetLastWriteTimeUtc(fullOutputPath);
+                        var lastLocalWriteDate = GetLastFileWrite(host, share, path, file.FileName);
                         if (file.LastWriteTime < lastLocalWriteDate)
                             continue;
                     }
@@ -328,6 +352,8 @@ public class Worker : BackgroundService
                 stream.Dispose();
                 File.Move(tempPath, fullOutputPath, true);
             }
+
+            UpdateLastFileWrite(host, share, path);
 
             var fileWriteEvent = new FileWriteEvent
             {
