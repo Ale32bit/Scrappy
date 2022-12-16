@@ -13,30 +13,30 @@ public class Metrics
         Online,
     }
 
-    public static readonly Counter ComparedFilesCounter = Prometheus.Metrics.CreateCounter(PREFIX + "compared_files", "Amount of compared files", new CounterConfiguration()
+    public static readonly Counter ComparedFilesCounter = Prometheus.Metrics.CreateCounter(PREFIX + "compared_files", "Amount of compared files", new CounterConfiguration
     {
         LabelNames = new[] { "hostname", "name" }
     });
 
-    public static readonly Counter DownloadedFilesCounter = Prometheus.Metrics.CreateCounter(PREFIX + "downloaded_files", "Amount of downloaded files", new CounterConfiguration()
+    public static readonly Counter DownloadedFilesCounter = Prometheus.Metrics.CreateCounter(PREFIX + "downloaded_files", "Amount of downloaded files", new CounterConfiguration
     {
         LabelNames = new[] { "hostname", "name" }
     });
 
-    public static readonly Counter DownloadedBytesCounter = Prometheus.Metrics.CreateCounter(PREFIX + "downloaded_bytes", "Amount of compared bytes", new CounterConfiguration()
+    public static readonly Counter DownloadedBytesCounter = Prometheus.Metrics.CreateCounter(PREFIX + "downloaded_bytes", "Amount of compared bytes", new CounterConfiguration
     {
         LabelNames = new[] { "hostname", "name" }
     });
 
     public static readonly Gauge HostsGauge = Prometheus.Metrics.CreateGauge(PREFIX + "hosts", "Hosts status", new GaugeConfiguration
     {
-        LabelNames = new[]
-        {
-            "hostname",
-            "name"
-        }
+        LabelNames = new[] { "hostname", "name" }
     });
 
+    public static readonly Counter ScrapeCyclesCounter = Prometheus.Metrics.CreateCounter(PREFIX + "scrape_cycles", "Amount of scrape cycles so far since the start of the program", new CounterConfiguration
+    {
+        LabelNames = new[] { "hostname", "name" }
+    });
 
     public static void SetHostStatus(HostStatus status, RemoteHost host)
     {

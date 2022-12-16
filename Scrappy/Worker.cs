@@ -5,7 +5,6 @@ using SMBLibrary;
 using SMBLibrary.Client;
 using static Scrappy.Metrics;
 using System.Collections.Concurrent;
-using System.IO;
 
 namespace Scrappy;
 public class Worker : BackgroundService
@@ -442,6 +441,8 @@ public class Worker : BackgroundService
                 using var countdownEvent = StartScraping(_configuration.GetValue("Threads", 2));
 
                 var isSet = await Task.Run(() => countdownEvent.Wait(TimeSpan.FromMinutes(_configuration.GetValue("CycleTimeout", 30))), stoppingToken);
+
+                ScrapeCyclesCounter.Inc();
 
                 if (!isSet)
                     foreach (var plugin in Plugins)
